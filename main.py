@@ -1,44 +1,47 @@
 import os
-import time
 import telebot
 from dotenv import load_dotenv
-from commands import register_commands
 
-# Load environment variables
 load_dotenv()
 
-# Replace 'TELEGRAM_BOT_TOKEN' with the token you received from BotFather
-TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-try:
-    bot = telebot.TeleBot(TOKEN)
-    register_commands(bot)
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
 
-    @bot.message_handler(commands=['start', 'hello'])
-    def send_welcome(message):
-        """
-        Handle '/start' and '/hello' commands.
+users = {}
 
-        Args:
-            message (telebot.types.Message): The message object.
-        """
-        bot.reply_to(message, "Hello! I'm a simple Telegram bot.")
+@bot.message_handler(commands=['start'])
+def start(message):
+    user_id = message.from_user.id
+    
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "referrals": 0}
+    
+    args = message.text.split()
+    
+    if len(args) > 1:
+        referrer_id = int(args[1])
+        if referrer_id != user_id and referrer_id in users:
+            users[referrer_id]["balance"] += 10
+            users[referrer_id]["referrals"] += 1
+    
+    bot.reply_to(message, 
+        f"👋 Welcome {message.from_user.first_name}!\n\n"
+        f"💰 Your Balance: {users[user_id]['balance']} coins\n"
+        f"👥 Your Referrals: {users[user_id]['referrals']}\n\n"
+        f"🔗 Your Referral Link:\n"
+        f"https://t.me/{bot.get_me().username}?start={user_id}"
+    )
 
-    @bot.message_handler(func=lambda msg: True)
-    def echo_all(message):
-        """
-        Echo all incoming text messages back to the user.
+@bot.message_handler(commands=['balance'])
+def balance(message):
+    user_id = message.from_user.id
+    if user_id in users:
+        bot.reply_to(message,
+            f"💰 Balance: {users[user_id]['balance']} coins\n"
+            f"👥 Referrals: {users[user_id]['referrals']}"
+        )
+    else:
+        bot.reply_to(message, "❌ Please start the bot first using /start")
 
-        Args:
-            message (telebot.types.Message): The message object.
-        """
-        bot.reply_to(message, message.text)
-
-    # Remove webhook to avoid conflicts with polling
-    bot.delete_webhook(drop_pending_updates=True)
-    bot.polling()
-
-except Exception as e:
-    print(f"CRITICAL ERROR: Failed to initialize bot with provided token. Error: {e}")
-    print("The application will hang to prevent a restart loop. Please fix the TELEGRAM_BOT_TOKEN environment variable.")
-    while True:
-        time.sleep(3600)
+print("Bot is running...")
+bot.infinity_polling()
